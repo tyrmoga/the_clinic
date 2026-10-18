@@ -2,9 +2,24 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, EmailStr, StringConstraints
 
-Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+Name = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=1,
+        max_length=200,
+        pattern=r"^[^\x00]*$",
+    ),
+]
 Password = Annotated[str, StringConstraints(min_length=8, max_length=128)]
-Phone = Annotated[str, StringConstraints(strip_whitespace=True, max_length=32)]
+Phone = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        max_length=32,
+        pattern=r"^[^\x00]*$",
+    ),
+]
 
 
 class RegisterRequest(BaseModel):

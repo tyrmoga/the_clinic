@@ -37,6 +37,7 @@ jobs:
     env:
       APP_ENV: test
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/clinic_test
+      TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/clinic_test
       JWT_SECRET: ci-only-secret-use-32-bytes-minimum
       RUN_DB_TESTS: "1"
 
@@ -85,6 +86,7 @@ jobs:
     env:
       RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
       RENDER_DATABASE_URL: ${{ secrets.RENDER_DATABASE_URL }}
+      SERVICE_URL: https://clinic-api-4b70.onrender.com
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -101,8 +103,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Require deploy secrets
+        if: env.RENDER_DATABASE_URL == '' || env.RENDER_DEPLOY_HOOK_URL == ''
+        run: |
+          echo "::error::RENDER_DATABASE_URL and RENDER_DEPLOY_HOOK_URL must be set"
+          exit 1
+
       - name: Migrate production database
-        if: env.RENDER_DATABASE_URL != ''
         env:
           DATABASE_URL: ${{ env.RENDER_DATABASE_URL }}
           APP_ENV: production
@@ -110,7 +117,6 @@ jobs:
         run: alembic upgrade head
 
       - name: Seed demo data
-        if: env.RENDER_DATABASE_URL != ''
         env:
           DATABASE_URL: ${{ env.RENDER_DATABASE_URL }}
           APP_ENV: production
@@ -118,5 +124,19 @@ jobs:
         run: python -m app.seed
 
       - name: Trigger Render deploy
-        if: env.RENDER_DEPLOY_HOOK_URL != ''
         run: curl --fail --silent --show-error --retry 3 -X POST "$RENDER_DEPLOY_HOOK_URL"
+
+      - name: Verify live service
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error "$SERVICE_URL/readyz" > /dev/null && \
+               curl --fail --silent --show-error -X POST "$SERVICE_URL/auth/login" \
+                 -H 'Content-Type: application/json' \
+                 -d '{"email":"demo1@example.com","password":"DemoPass123!"}' > /dev/null; then
+              echo "Live service is ready."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Live service did not become ready."
+          exit 1

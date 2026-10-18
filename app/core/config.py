@@ -32,8 +32,11 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_settings(self) -> "Settings":
-        if self.app_env.lower() == "production" and self.jwt_secret == DEFAULT_JWT_SECRET:
-            raise ValueError("JWT_SECRET must be set in production")
+        if self.app_env.lower() == "production":
+            if self.jwt_secret == DEFAULT_JWT_SECRET or len(self.jwt_secret) < 32:
+                raise ValueError(
+                    "JWT_SECRET must be at least 32 characters and must not be the default"
+                )
         return self
 
     @property

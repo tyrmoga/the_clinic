@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DataError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger(__name__)
@@ -132,6 +133,20 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(StarletteHTTPException)
     async def handle_http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         return _http_error(exc, request)
+
+    @app.exception_handler(DataError)
+    async def handle_data_error(request: Request, exc: DataError) -> JSONResponse:
+        logger.warning(
+            "Database rejected input: %s",
+            type(exc.orig).__name__ if exc.orig is not None else "DataError",
+            extra={"request_id": request_id_for(request)},
+        )
+        return json_error(
+            422,
+            "invalid_input",
+            "The request contains invalid text.",
+            request=request,
+        )
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation_error(
