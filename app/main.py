@@ -7,6 +7,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import RedirectResponse
 
 from app.api.auth import router as auth_router
+from app.api.availability import router as availability_router
 from app.api.health import router as health_router
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
@@ -65,6 +66,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(auth_router)
+    app.include_router(availability_router)
 
     @app.get("/", include_in_schema=False)
     async def root() -> RedirectResponse:

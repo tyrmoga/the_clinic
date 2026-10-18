@@ -70,5 +70,8 @@ jobs:
             echo "No migrations yet; skipping."
           fi
 
+      - name: Seed demo data
+        run: python -m app.seed
+
       - name: Test
         run: pytest -q
