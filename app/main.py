@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import RedirectResponse
 
+from app.api.appointments import router as appointments_router
 from app.api.auth import router as auth_router
 from app.api.availability import router as availability_router
 from app.api.health import router as health_router
@@ -67,6 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(auth_router)
     app.include_router(availability_router)
+    app.include_router(appointments_router)
 
     @app.get("/", include_in_schema=False)
     async def root() -> RedirectResponse:

@@ -64,14 +64,11 @@ async def _db_now(session: AsyncSession) -> datetime:
     return now
 
 
-async def _load_availability(
+async def slots_for_doctor(
     session: AsyncSession,
     doctor: Doctor,
     day: date,
-    db_now: datetime,
-) -> Availability:
-    tz = ZoneInfo(doctor.timezone)
-
+) -> list[Slot]:
     hours = (
         await session.scalars(
             select(DoctorWorkingHour)
@@ -83,7 +80,18 @@ async def _load_availability(
         )
     ).all()
     intervals = [(hour.start_time, hour.end_time) for hour in hours]
-    slots = generate_slots(day, doctor.timezone, doctor.slot_minutes, intervals)
+    return generate_slots(day, doctor.timezone, doctor.slot_minutes, intervals)
+
+
+async def _load_availability(
+    session: AsyncSession,
+    doctor: Doctor,
+    day: date,
+    db_now: datetime,
+) -> Availability:
+    tz = ZoneInfo(doctor.timezone)
+
+    slots = await slots_for_doctor(session, doctor, day)
 
     day_start_local = datetime.combine(day, time.min, tzinfo=tz)
     day_start = day_start_local.astimezone(UTC)
