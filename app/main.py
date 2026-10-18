@@ -16,6 +16,7 @@ from app.core.middleware import (
     RequestIDMiddleware,
     SecurityHeadersMiddleware,
 )
+from app.core.rate_limit import RateLimitMiddleware
 from app.db.session import engine
 
 
@@ -57,8 +58,9 @@ def create_app() -> FastAPI:
         TrustedHostMiddleware,
         allowed_hosts=settings.trusted_hosts_list,
     )
-    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_body_bytes)
+    app.add_middleware(RateLimitMiddleware, settings=settings)
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestIDMiddleware)
 
     app.include_router(health_router)

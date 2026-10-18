@@ -30,7 +30,7 @@ validation, auth, rate limiting, and migrations.
 
 | Resource | Setting |
 |---|---|
-| Web service | Python runtime, build `pip install -r requirements.txt`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| Web service | Python runtime, build `pip install -r requirements.txt`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"` |
 | Health check | `/healthz` |
 | Postgres | Internal connection URL; paid plan recommended |
 | Environment | Set in the Render dashboard, never in git |
@@ -109,7 +109,10 @@ Render removes host/TLS work, but the API still has to defend itself:
   Benchmark login p95; lower memory/time cost or upgrade the instance if needed.
 - Short-lived JWTs, owner checks returning `404`.
 - Rate limiting: in-app token buckets per patient/IP, tighter for `/auth/*`;
-  optionally put Cloudflare in front for edge/WAF protection.
+  optionally put Cloudflare in front for edge/WAF protection. Behind Render,
+  uvicorn's `--proxy-headers --forwarded-allow-ips="*"` lets per-IP limits see
+  the client address; this is safe because the app is only reachable through
+  Render's proxy.
 - Body-size and request timeouts at the app layer.
 - CORS disabled by default; allow only the exact frontend origin if one is added.
 - Security headers on responses.

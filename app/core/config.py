@@ -20,8 +20,11 @@ class Settings(BaseSettings):
     jwt_secret: str = DEFAULT_JWT_SECRET
     jwt_ttl_minutes: int = 60
     availability_cache_ttl_seconds: int = 10
+    rate_limit_enabled: bool = True
     rate_limit_auth_per_minute: int = 5
+    rate_limit_availability_per_minute: int = 60
     rate_limit_booking_per_minute: int = 30
+    rate_limit_default_per_minute: int = 60
     trusted_hosts: str = "*"
     cors_origins: str = ""
     max_body_bytes: int = 1_000_000

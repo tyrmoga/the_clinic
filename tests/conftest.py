@@ -9,6 +9,7 @@ os.environ.setdefault(
     "postgresql+psycopg://postgres:postgres@localhost:5432/clinic_test",
 )
 os.environ.setdefault("JWT_SECRET", "test-secret-use-32-bytes-minimum")
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 from app.main import create_app  # noqa: E402
 
