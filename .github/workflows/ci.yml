@@ -38,6 +38,7 @@ jobs:
       APP_ENV: test
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/clinic_test
       JWT_SECRET: ci-only-secret
+      RUN_DB_TESTS: "1"
 
     steps:
       - name: Checkout
