@@ -1,13 +1,60 @@
-# Design: Clinic Appointment Booking System
+# Clinic Appointment Booking System
 
-Savannah Informatics backend take-home assessment — **Section 1 (System Design)**.
+Savannah Informatics backend take-home assessment.
+
+| Submission | |
+|---|---|
+| Live API | `https://<service>.onrender.com`|
+| API docs | `https://<service>.onrender.com/docs` · `https://<service>.onrender.com/openapi.json` |
+| Repository | this repo, branch `main` |
+| Demo login | `demo1@clinic.test` / `DemoPass123!` (patients `1`–`5`) |
+| Doctors | IDs `1`–`5` |
+
 
 > A small clinic (5 doctors) needs patients to book 30-minute appointment slots
 > online: see which slots are free for a doctor on a day, book one so nobody else
 > can take it, cancel, and reschedule. We're starting small but want to grow.
 
-Diagrams: [ERD, race sequence, state machines, component, validation flow](docs/diagrams.md).
+## Evaluator quick start
 
+All required endpoints are in the interactive OpenAPI docs. Click **Authorize**
+and paste the bearer token from the login call. The script below requires `curl`
+and `jq`.
+
+```bash
+BASE_URL=https://<service>.onrender.com
+DATE=$(date -u -d 'next monday' +%F)
+TOKEN=$(curl -s "$BASE_URL/auth/login" -H 'Content-Type: application/json' \
+  -d '{"email":"demo1@clinic.test","password":"DemoPass123!"}' | jq -r .access_token)
+
+# 1. availability
+curl -s "$BASE_URL/doctors/1/availability?date=$DATE" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 2. book (start_at is canonical; start_time is accepted as an alias)
+APPT=$(curl -s -X POST "$BASE_URL/appointments" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"doctor_id\":1,\"start_at\":\"${DATE}T09:00:00+03:00\",\"patient_id\":1}" \
+  | jq -r .id)
+
+# 3. reschedule
+curl -s -X PATCH "$BASE_URL/appointments/$APPT/reschedule" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"start_at\":\"${DATE}T10:00:00+03:00\"}"
+
+# 4. cancel
+curl -s -X PATCH "$BASE_URL/appointments/$APPT/cancel" \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"reason":"demo"}'
+```
+
+The bearer token identifies the patient. `patient_id` in the **booking** body is
+optional and is only a compatibility assertion: if supplied it must match the
+token (otherwise `404`); if omitted, the token's patient is used. `start_time` is
+accepted as an alias for `start_at` in request bodies. `GET /` redirects to
+`/docs`.
+
+The design sections follow; the submission run steps and CI/CD note are at the end.
 
 ## 1. Problem & scope
 
@@ -29,8 +76,9 @@ Diagrams: [ERD, race sequence, state machines, component, validation flow](docs/
 
 ### Additional features (beyond the assessment)
 1. **Patient auth** — self-serve email/password register and login; `patient_id`
-   comes from the bearer token, never the request body; touching someone else's
-   appointment returns `404` (see [decision #8](docs/decisions.md)).
+   comes from the bearer token; an optional body `patient_id` on booking must
+   match it; touching someone else's appointment returns `404`
+   (see [decision #8](docs/decisions.md)).
    
 2. **Waitlist (deferred)** — demand above supply would benefit from FIFO offers,
    but it is not required by the assessment and adds a second state machine plus
@@ -64,11 +112,12 @@ Diagrams: [ERD, race sequence, state machines, component, validation flow](docs/
   RPO ~5 min, RTO < 1 hr — targets that depend on the chosen plan. The free
   database expires after 30 days and has no backups.
 - **Security:** PII (patient name/contact) behind self-serve email/password auth:
-  argon2id password hashes, short-lived bearer tokens, `patient_id` derived from
-  the token, `404` for non-owner access ([decision #8](docs/decisions.md)).
-  Strict input validation, in-app rate limits (optional Cloudflare in front),
-  Postgres not publicly reachable, TLS at the Render edge. See
-  [Deployment (Render)](docs/deployment.md).
+  argon2id password hashes (parameters tuned for Render's 0.1 CPU / 512 MB free
+  tier, hashing off the event loop), short-lived bearer tokens, `patient_id`
+  derived from the token, `404` for non-owner access
+  ([decision #8](docs/decisions.md)). Strict input validation, in-app rate limits
+  (optional Cloudflare in front), Postgres not publicly reachable, TLS at the
+  Render edge. See [Deployment (Render)](docs/deployment.md).
 
   ### Out of scope (explicit)
 - Payments, SMS/email reminders, push notifications.
@@ -122,7 +171,7 @@ Growth has **two independent axes** and they behave differently:
 | Successful bookings/day (~70%) | ~56 | ~5,600 |
 | Write QPS (avg) | 56 / 86,400 ≈ **0.0007** | ≈ 0.065 |
 | Peak write QPS (×10 burst) | < 0.01 | < 1 |
-| Availability reads | ~500/day | ~50,000/day → peak **< 10 QPS** |
+| Availability reads | ~500/day | ~50,000/day → peak **~14 QPS** |
 | Storage/day | ~56 × ~400 B ≈ 22 KB | ≈ 2.2 MB |
 | Storage/year | ~8 MB | ~0.8 GB |
 
@@ -162,32 +211,33 @@ What the numbers show:
    node's ~1,000 QPS rule of thumb, but enough to saturate a small connection pool
    and produce timeouts if the retries are unmanaged.
 
-**What the numbers mean:** 
-1. *Nothing distributed.* Even whole-town demand is
-   ~3 peak read QPS and ~0.6 write-attempt QPS under 
-   the smooth peak model — and ~167 read QPS even in 
-   the flash-crowd worst case — still below the ~1,000 QPS
-   single-node rule of thumb (a rule of thumb, not a measurement of this system). 
-   No sharding, queue, or microservices. But the demand
-   axis does force three **surge defenses** that the supply-only estimate would miss:
+**What the numbers mean:**
 
-    - **Rate limiting** in the app (per patient/IP, token bucket) plus `429` +
-        `Retry-After`, so a flash crowd can't convert into a retry storm. Optional
-        Cloudflare in front adds edge/WAF protection.
-    - **Short-TTL availability caching** per `(doctor_id, date)` (5–10 s), because
-        stale availability is safe: booking always revalidates against the DB and a
-        taken slot returns `409`. Not Redis. The scale is too small to justify another
-        potential point of failure; rather we use an in-process cache that holds the computed 
-        availability list for 5–10 seconds. Something like Python’s cachetools.TTLCache, or 
-        a dict with timestamps, would do. In practice, what this means is:
-
-          1. *Each process has its own cache.* With two app containers, or several uvicorn workers in one container, each keeps a separate copy. A slot booked through worker A can still show as free from worker B’s cache for up to 10 seconds
-          2. *There is no shared invalidation.* The entry just expires. You could also clear that doctor/day entry locally on a booking, cancel or reschedule, but that only helps the process that handled the write.
-          3. *Staleness is safe.* Booking always rechecks the database and the unique index decides, so a stale “free” slot produces a 409, never a double booking. Because the 1-hour rule is also checked at booking time, a stale list can’t let someone book a slot that has since become too soon.
-          4. *It’s a good fit at this scale*. At one or two app processes the cost is small.
-
-    - **Retry backoff + jitter with a retry budget** in clients, so a 167 QPS burst
-        does not double or triple itself.
+1. **Nothing distributed.** Even whole-town demand is ~3 peak read QPS and
+   ~0.6 write-attempt QPS under the smooth peak model — and ~167 read QPS even in
+   the flash-crowd worst case — still below the ~1,000 QPS single-node rule of
+   thumb (a rule of thumb, not a measurement of this system). No sharding, queue,
+   or microservices. But the demand axis does force three **surge defenses** that
+   the supply-only estimate would miss:
+   - **Rate limiting** in the app (per patient/IP, token bucket) plus `429` +
+     `Retry-After`, so a flash crowd can't convert into a retry storm. Optional
+     Cloudflare in front adds edge/WAF protection.
+   - **Short-TTL availability caching** per `(doctor_id, date)` (5–10 s), because
+     stale availability is safe: booking always revalidates against the DB and a
+     taken slot returns `409`. Not Redis — the scale is too small to justify
+     another point of failure. An in-process `TTLCache` (or a dict with
+     timestamps) holds the computed list for 5–10 seconds. In practice:
+     - Each process has its own cache. With two app instances or several uvicorn
+       workers, each keeps a separate copy. A slot booked through worker A can
+       still show as free from worker B's cache for up to 10 seconds.
+     - There is no shared invalidation. The entry expires; clearing the
+       doctor/day entry locally on a write only helps the process that handled it.
+     - Staleness is safe. Booking rechecks the database and the unique index
+       decides, so a stale "free" slot produces a `409`, never a double booking.
+       The 1-hour rule is also rechecked at booking time.
+     - It fits this scale: one or two app processes make the cost small.
+   - **Retry backoff + jitter with a retry budget** in clients, so a 167 QPS burst
+     does not double or triple itself.
 
 A **waitlist** is the product answer to demand exceeding supply. It is
 deliberately deferred — the design is in
@@ -205,9 +255,10 @@ no-double-booking.
 REST over HTTPS/JSON; paths are exactly as the assessment specifies, with no `/v1`
 prefix (versioning can be added when a breaking change arrives). All timestamps are ISO-8601 UTC
 (`Z`) in responses; requests may carry an offset (e.g. `+03:00`) and are
-normalized. A stable error envelope is used everywhere. Every endpoint except
-`POST /auth/*` requires `Authorization: Bearer <token>`; a missing/invalid
-token is `401`.
+normalized. A timestamp without an offset is interpreted in the doctor's
+timezone. A stable error envelope is used everywhere. Every endpoint except `POST /auth/*` requires `Authorization: Bearer <token>`; a missing/invalid
+token is `401`. `GET /` redirects to `/docs`; `GET /openapi.json` exposes the
+schema.
 
 ```
 4xx/5xx
@@ -227,11 +278,14 @@ token is `401`.
 | 429 | Rate limited (`Retry-After` set) |
 | 500 / 503 | Server / DB unavailable (`Retry-After` set on 503) |
 
-Requests are validated strictly: unknown fields are rejected, strings are
-length-bounded, timestamps must carry `Z` or an offset, `reason` is 1–500 chars,
-and pagination `limit` is 1–100. Failures return the envelope with per-field
-details; malformed syntax is `400`, semantic failures are `422`. Full rules are
-in the [low-level design](docs/low-level-design.md#input-validation).
+Requests are validated strictly: unknown fields are rejected; `start_time` is
+accepted as an alias for `start_at`, and `patient_id` is accepted optionally on
+`POST /appointments` only. Strings are length-bounded, timestamps with `Z`/an
+offset are normalized to UTC, naive timestamps are interpreted in the doctor's
+timezone, `reason` is 1–500 chars, and pagination `limit` is 1–100. Failures
+return the envelope with per-field details; malformed syntax is `400`, semantic
+failures are `422`. Full rules are in the
+[low-level design](docs/low-level-design.md#input-validation).
 
 ### `POST /auth/register`, `POST /auth/login` — auth
 ```json
@@ -261,18 +315,21 @@ curl -s "$BASE_URL/doctors/1/availability?date=$DATE" \
 
 ### `POST /appointments` — book
 ```json
-// request (patient_id comes from the token, never the body)
-{ "doctor_id": 3, "start_at": "2026-10-20T09:00:00+03:00" }
+// request (patient_id comes from the token; optional body patient_id is an assertion)
+{ "doctor_id": 3, "start_at": "2026-10-20T09:00:00+03:00", "patient_id": 42 }
+// "start_time" is accepted as an alias for "start_at" in request bodies
 
 // 201 Created
 { "id": "1f0c…", "doctor_id": 3, "patient_id": 42,
   "start_at": "2026-10-20T06:00:00Z", "end_at": "2026-10-20T06:30:00Z",
   "status": "booked", "created_at": "2026-10-19T07:12:00Z" }
 ```
-Validation order → error: unknown doctor `404`; misaligned to the 30-minute slot
-grid / not within working hours `422`; less than 1 hour from now (this also covers past
-slots) `422`; slot already booked `409`. `end_at` is always `start_at + 30 min`.
-Accepts an `Idempotency-Key` header (see *Retry safety* below).
+Validation order → error: unknown doctor `404`; body `patient_id` present and not
+the token's patient `404`; misaligned to the 30-minute slot grid / not within
+working hours `422`; less than 1 hour from now (this also covers past slots)
+`422`; slot already booked `409`. `end_at` is always `start_at + 30 min`.
+Accepts an `Idempotency-Key` header (see *Retry safety* below). Responses use
+`start_at`; `start_time` is a request alias only.
 
 ### `GET /doctors/{id}/availability?date=2026-10-20`
 ```json
@@ -300,12 +357,13 @@ already cancelled or the appointment has already started.
 ```json
 // request
 { "start_at": "2026-10-21T10:30:00+03:00" }
+// "start_time" is accepted as an alias
 // 200 OK → updated appointment (new start_at/end_at)
 ```
 Validates the new slot like a fresh booking; frees the old slot. `404` unknown;
 `409` if the appointment is cancelled, has already started, or the new slot is
-taken. Rescheduling to the **same** `start_at` is valid and returns `200` as a
-no-op.
+taken. Rescheduling to the **same** `start_at` returns `200` as a no-op, even
+inside the 1-hour window; the no-op check runs before slot validation.
 
 ### Bonus: `GET /patients/{id}/appointments?limit=20&cursor=…`
 ```json
@@ -339,7 +397,8 @@ front, it can add edge/WAF protection.
 Patient → Render edge (managed TLS) → FastAPI web service (stateless, in-process
 5–10 s availability cache) → Render Postgres (source of truth; a partial unique
 index arbitrates booking; not publicly reachable). Alembic runs as a pre-deploy
-step. See [Deployment (Render)](docs/deployment.md) and the
+step on paid web services; on the free web tier, migrations run from CI against
+the external database URL. See [Deployment (Render)](docs/deployment.md) and the
 [component diagram](docs/diagrams.md#5-component-diagram).
 
 ## 5. Documentation
@@ -354,3 +413,30 @@ step. See [Deployment (Render)](docs/deployment.md) and the
 - [Deployment (Render)](docs/deployment.md) — Render resources, free-tier limits, CI/CD, backups
 - [Changing slot duration](docs/slot-duration-migration.md) — zero-downtime path for 100M rows
 - [Future extensions](docs/future-extensions.md) — deferred waitlist design
+
+## 6. Run locally
+
+Requires Python 3.12+ and a local PostgreSQL.
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env        # set DATABASE_URL and JWT_SECRET
+alembic upgrade head
+python -m app.seed
+uvicorn app.main:app --reload
+```
+
+Open `http://localhost:8000/docs` and log in with `demo1@clinic.test` /
+`DemoPass123!`.
+
+## 7. CI/CD and deployment
+
+- Every pull request runs `ruff check` and `pytest` against a PostgreSQL service
+  container.
+- Merge to `main` runs the same tests, applies migrations, and deploys to Render.
+- Paid web services run migrations through Render's pre-deploy command; on the
+  free web tier, GitHub Actions runs them against the external database URL before
+  the deploy.
+- Render keeps the previous deploy for rollback if the health check fails.
+- Full details: [Deployment (Render)](docs/deployment.md).

@@ -19,7 +19,7 @@ FastAPI web service (Render)             ← auth, input validation, business lo
 Render Postgres                          ← source of truth; partial unique index
    │                                        arbitrates booking; idempotency table;
    │                                        not publicly reachable
-   ├─ Alembic migrations (pre-deploy)
+   ├─ Alembic migrations (paid pre-deploy; CI on free tier)
    └─ managed backups / PITR (paid plan)
 ```
 
@@ -41,4 +41,5 @@ Each component earns its place against a requirement/number:
   database expires after 30 days and has no backups, so it is only suitable for a
   short review window ([Deployment](deployment.md#free-tier-reality)).
 - **Alembic migrations** — schema changes are versioned and run as a pre-deploy
-  step ([Deployment](deployment.md#cicd)).
+  step on paid web services; on the free web tier, CI runs them against the
+  external database URL before the deploy ([Deployment](deployment.md#cicd)).

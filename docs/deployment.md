@@ -55,6 +55,9 @@ TLS; enable it for your driver (e.g. `sslmode=require` for libpq,
   backups, no managed pooling.
 - **Paid Postgres ($6+/month):** removes the 30-day expiry and adds backups/PITR.
 - **Paid web service ($7+/month):** removes the sleep/cold start.
+- **Login cost:** argon2id is tuned for 0.1 CPU / 512 MB. Expect a few hundred
+  milliseconds per hash; hashing runs in a worker thread so other requests are
+  not blocked. Re-benchmark on the deployed instance.
 
 For the assessment, the free web service is usable, but the evaluator's first
 request may be slow. If the review window may extend past 30 days, use a paid
@@ -98,9 +101,13 @@ On merge to `main`:
 
 Render removes host/TLS work, but the API still has to defend itself:
 
-- Input validation: strict Pydantic schemas, bounded lengths, timestamp offsets,
-  unknown fields rejected.
-- Auth: argon2id, short-lived JWTs, owner checks returning `404`.
+- Input validation: strict Pydantic schemas, bounded lengths, timestamp
+  normalization (naive timestamps use the doctor's timezone), unknown fields
+  rejected (except `start_time` and a booking-only `patient_id` assertion).
+- Auth: argon2id with parameters tuned for the 0.1 CPU / 512 MB free instance;
+  hash and verify in a worker thread so the event loop stays responsive.
+  Benchmark login p95; lower memory/time cost or upgrade the instance if needed.
+- Short-lived JWTs, owner checks returning `404`.
 - Rate limiting: in-app token buckets per patient/IP, tighter for `/auth/*`;
   optionally put Cloudflare in front for edge/WAF protection.
 - Body-size and request timeouts at the app layer.
@@ -125,7 +132,8 @@ Render removes host/TLS work, but the API still has to defend itself:
 Seed command (idempotent) creates:
 - Doctors `1`–`5`: Dr. Wanjiku, Dr. Otieno, Dr. Mwangi, Dr. Achieng, Dr. Kamau.
 - Mon–Fri 08:00–12:00 and 13:00–17:00 (16 slots/day).
-- Patients `demo1@clinic.test` … `demo5@clinic.test`, password `DemoPass123!`.
+- Patients `demo1@clinic.test` … `demo5@clinic.test` (IDs `1`–`5`), password
+  `DemoPass123!`.
 
 The README publishes the live URL, demo credentials, and doctor IDs.
 

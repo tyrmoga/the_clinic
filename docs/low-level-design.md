@@ -5,10 +5,8 @@ architectural rationale is in [Key decisions](decisions.md); rendered diagrams
 (ERD, race sequence, state machines, validation flow) are in
 [Diagrams](diagrams.md).
 
-This document covers the internals needed to build and verify the assessment:
-module layout, the shared slot logic, transaction boundaries, locking, tests,
-migrations, and delivery. It describes the intended build; application code is
-not in this repository yet.
+This document defines the implementation contract for the build. The
+[README](../README.md) tracks the live URL, local run steps, and CI/CD.
 
 ## 1. Scope against the assessment
 
@@ -80,7 +78,8 @@ Rendered decision order: [booking validation flow](diagrams.md#6-booking-validat
 Validation happens at three layers, and the API maps failures explicitly:
 1. **Edge**: body-size limit (1 MB), header limits, rate limit.
 2. **Schema boundary (Pydantic)**: `extra="forbid"`, strict types, bounded
-   lengths; unknown fields are rejected rather than ignored.
+   lengths; unknown fields are rejected. The only compatibility aliases are
+   `start_time` → `start_at` and an optional booking-body `patient_id`.
 3. **Domain/DB**: slot rules, working hours, ownership, uniqueness, DB checks.
 
 | Input | Rule | Failure |
@@ -91,8 +90,9 @@ Validation happens at three layers, and the API maps failures explicitly:
 | `full_name` | trim, 1–200 chars | `422` |
 | `phone` | optional, max 32 chars, E.164-ish | `422` |
 | `doctor_id` | positive integer | `422` |
+| `patient_id` (body) | optional on `POST /appointments` only; a compatibility assertion, not the identity source; if present must equal the token's `sub`, otherwise `404` | `404` / `422` |
 | Path `{id}` | valid UUID (appointment) / positive integer (doctor, patient) | `400` |
-| `start_at` | ISO-8601 with `Z` or an offset; normalized to UTC; naive values rejected | `400` (parse) / `422` (naive or out of range) |
+| `start_at` | ISO-8601; `start_time` accepted as an alias; values with `Z`/an offset are normalized to UTC; naive values are interpreted in the doctor's timezone | `400` (parse) / `422` (out of range) |
 | `date` query | `YYYY-MM-DD`, required, valid calendar date | `400` |
 | `reason` | trim, 1–500 chars | `422` |
 | `limit` | 1–100 (default 20) | `422` |
@@ -102,7 +102,9 @@ Validation happens at three layers, and the API maps failures explicitly:
 Additional rules:
 - Only parameterized SQL/ORM queries; no string interpolation of input.
 - Response models are explicit allowlists; `password_hash` is never serialized.
-- Ownership is checked from the token, not from a body/path `patient_id`.
+- Ownership is checked from the token; an optional booking-body `patient_id` must
+  match it (`404` otherwise), and a path `patient_id` must match for the bonus
+  listing.
 - Request IDs are returned on every error; logs keep them for correlation.
 - Malformed JSON is mapped from the framework default to the envelope; semantic
   validation is `422`, malformed syntax is `400`.
@@ -146,6 +148,8 @@ Client                API                    Service / DB
   │                     ├────────────────────────>│ BEGIN
   │                     │                         │ SELECT now() → db_now
   │                     │                         │ SELECT doctor → 404
+  │                     │                         │ normalize start_at (doctor tz if naive)
+  │                     │                         │ body patient_id mismatch → 404
   │                     │                         │ idempotency lookup
   │                     │                         │   hit + same hash → stored 201
   │                     │                         │   hit + different hash → 409
@@ -160,7 +164,9 @@ Client                API                    Service / DB
 
 - `db_now` is selected once per transaction and reused for every time comparison;
   app-host clocks are never trusted.
-- Booking request bodies never contain `patient_id`; it comes from the token.
+- `patient_id` comes from the token. An optional body `patient_id` on booking is a
+  compatibility assertion, not an identity source; it must match the token, or the
+  request returns `404`.
 - `end_at` is computed server-side as `start_at + doctor.slot_minutes`.
 - Insert only; no `SELECT ... FOR UPDATE` on the slot. The partial unique index
   `one_active_booking_per_slot` decides the winner.
@@ -211,10 +217,11 @@ BEGIN
   missing or owner mismatch                → 404
   status <> 'booked'                       → 409
   SELECT now() → db_now
+  load doctor; normalize new_start_at (doctor tz)
   start_at <= db_now                       → 409 appointment_started
-  validate_slot(new_start_at, db_now)      → 422
   if new_start_at = old_start_at:
     COMMIT; return 200 (no-op, no audit row)
+  validate_slot(new_start_at, db_now)      → 422
   UPDATE start_at, end_at, updated_at
   INSERT appointment_events(rescheduled, old_start_at, new_start_at)
 COMMIT
@@ -222,8 +229,10 @@ COMMIT
 
 The unique index arbitrates the new slot. A collision rolls the whole transaction
 back, so the old slot is never lost. Rescheduling to the same `start_at` is a
-valid no-op for the owner and returns `200`: the unique index sees the same row,
-so no conflict is raised. A started appointment is rejected (`409`).
+valid no-op for the owner and returns `200`. The no-op check runs **before**
+`validate_slot`, so a same-slot reschedule inside the 1-hour window still returns
+`200`; it does not bypass the started check. A started appointment is rejected
+(`409`).
 
 ## 8. Availability — `GET /doctors/{id}/availability?date=`
 
@@ -302,6 +311,13 @@ LIMIT :limit + 1;
 - **Login** — look up by email, verify the hash (verify against a dummy hash when
   the email is unknown), issue a short-lived JWT with `sub = patient_id`;
   failure → `401`.
+- **Argon2 tuning** — start at `time_cost=2`, `memory_cost=19456 KiB` (19 MiB),
+  `parallelism=1` (OWASP baseline). Benchmark on the actual Render free instance
+  (0.1 CPU / 512 MB); if login p95 exceeds ~500 ms or memory pressure appears,
+  lower to `memory_cost=12288–16384` and/or `time_cost=1`, record the trade-off,
+  or upgrade the instance. Do not ship parameters tuned for a larger machine.
+- Run `hash`/`verify` via `asyncio.to_thread` (or Starlette's
+  `run_in_threadpool`) so hashing never blocks the event loop.
 - Protected routes derive `patient_id` from the token. Owner mismatch is `404`,
   not `403`, to avoid leaking existence.
 - Auth is not required by the assessment, so the README publishes seeded demo
@@ -363,13 +379,16 @@ Unit (no DB):
 Integration (real Postgres, migrations applied):
 - Book: `201`; duplicate → `409`; outside hours → `422`; past/within 1 hour →
   `422`; unknown field → `422`; malformed body → `400`; wrong content type → `415`.
+- Compatibility: `start_time` alias books; body `patient_id` matching the token
+  succeeds; a mismatched body `patient_id` → `404`; a naive timestamp is
+  interpreted in the doctor's timezone.
 - Availability: excludes booked, cancelled slots reappear, excludes slots within
   1 hour, respects date/timezone, overlap predicate.
 - Cancel: frees the slot; second cancel → `409`; already started → `409`;
   unknown → `404`.
 - Reschedule: old slot free, new slot taken; cancelled → `409`; started → `409`;
-  same `start_at` → `200` no-op; new-slot collision → `409` and old slot
-  unchanged.
+  same `start_at` → `200` no-op, including inside the 1-hour window; new-slot
+  collision → `409` and old slot unchanged.
 - Concurrency: two parallel bookings of the same slot using separate sessions
   and a barrier → exactly one `201`, one `409`, one active row.
 - Bonus: patient listing order, keyset pagination, non-owner `404`.
@@ -388,7 +407,7 @@ coverage of the booking service and all four required endpoints.
 - Seed command creates:
   - Doctors `1`–`5`: Dr. Wanjiku, Dr. Otieno, Dr. Mwangi, Dr. Achieng, Dr. Kamau.
   - Mon–Fri 08:00–12:00 and 13:00–17:00 working hours (16 slots/day).
-  - Patients `demo1@clinic.test` … `demo5@clinic.test`, password
+  - Patients `demo1@clinic.test` … `demo5@clinic.test` (IDs `1`–`5`), password
     `DemoPass123!` (demo environment only).
 - Seed is idempotent (`ON CONFLICT DO NOTHING` or a lookup by natural key) so it
   can run on every deploy.
@@ -440,6 +459,7 @@ Deployment notes:
 - Structured logs include `request_id`, method, path, status, duration; never log
   passwords, tokens, or request bodies containing them.
 - `/healthz` for liveness; `/readyz` for DB connectivity.
+- `GET /` redirects to `/docs`; `GET /openapi.json` exposes the schema.
 - Daily cleanup deletes `idempotency_keys` older than 24 h.
 - Backups follow the Render Postgres plan: paid plans provide managed backups and
   PITR; the free plan has none ([Deployment](deployment.md#backups-and-recovery)).

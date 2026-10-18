@@ -237,4 +237,7 @@ flowchart TD
 ```
 
 The 1-hour window check is the bonus rule and also rejects past slots. Without
-it, the predicate is `start_at > now()`.
+it, the predicate is `start_at > now()`. Request aliases: `start_time` is accepted
+for `start_at`; an optional `patient_id` in the booking body is only a
+compatibility assertion and must match the token; a naive timestamp is read in
+the doctor's timezone.

@@ -25,3 +25,4 @@ Back to the [README](../README.md). Demand assumptions are in
 | Cancel/reschedule after the appointment has started | State change refused | `409`; a past slot is neither freed nor moved | "This appointment has already started" |
 | Same `Idempotency-Key` replayed with a different body | `request_hash` mismatch on the stored row | `409` (client bug); the original stored response is untouched | Safe retry; misuse is visible |
 | Brute-force password guessing | Repeated `POST /auth/login` floods auth | Tighter in-app per-IP bucket → `429 Retry-After`; optional Cloudflare; argon2id keeps a single hash slow | Legit users unaffected |
+| Concurrent logins on a 0.1 CPU instance | Password hashing competes for CPU and memory | Argon2 parameters tuned for 512 MB; hash/verify in a worker thread; auth rate limit; upgrade the instance if p95 rises | Logins may take longer, but other endpoints stay responsive |
