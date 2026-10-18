@@ -47,3 +47,9 @@ class RescheduleRequest(BaseModel):
     start_at: datetime = Field(
         validation_alias=AliasChoices("start_at", "start_time"),
     )
+
+
+class AppointmentListResponse(BaseModel):
+    data: list[AppointmentResponse]
+    next_cursor: str | None = None
+    has_more: bool
