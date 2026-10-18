@@ -1,6 +1,5 @@
 from functools import lru_cache
 
-from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_JWT_SECRET = "dev-only-change-me-use-32-bytes-minimum"
@@ -30,15 +29,6 @@ class Settings(BaseSettings):
     max_body_bytes: int = 1_000_000
     log_level: str = "INFO"
 
-    @model_validator(mode="after")
-    def validate_production_settings(self) -> "Settings":
-        if self.app_env.lower() == "production":
-            if self.jwt_secret == DEFAULT_JWT_SECRET or len(self.jwt_secret) < 32:
-                raise ValueError(
-                    "JWT_SECRET must be at least 32 characters and must not be the default"
-                )
-        return self
-
     @property
     def trusted_hosts_list(self) -> list[str]:
         hosts = [host.strip() for host in self.trusted_hosts.split(",") if host.strip()]
@@ -52,3 +42,10 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def validate_production_secrets(settings: Settings) -> None:
+    if settings.app_env.lower() != "production":
+        return
+    if settings.jwt_secret == DEFAULT_JWT_SECRET or len(settings.jwt_secret) < 32:
+        raise ValueError("JWT_SECRET must be at least 32 characters and must not be the default")

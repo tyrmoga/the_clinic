@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 import jwt
+from cachetools import LRUCache
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import JSONResponse
@@ -44,7 +45,7 @@ class TokenBucket:
 class RateLimiter:
     def __init__(self, limits: Mapping[str, int]) -> None:
         self.limits = dict(limits)
-        self.buckets: dict[tuple[str, str], TokenBucket] = {}
+        self.buckets: LRUCache = LRUCache(maxsize=10_000)
         self.last_cleanup = time.monotonic()
 
     def consume(self, scope: str, key: str, now: float | None = None) -> tuple[bool, float]:
@@ -93,7 +94,11 @@ def rate_key(request: Request) -> str:
             except jwt.PyJWTError:
                 pass
 
-    host = request.client.host if request.client is not None else "unknown"
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        host = forwarded_for.split(",")[-1].strip()
+    else:
+        host = request.client.host if request.client is not None else "unknown"
     return f"ip:{host}"
 
 

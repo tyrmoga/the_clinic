@@ -1,6 +1,11 @@
 from datetime import UTC, date, datetime, time, timedelta
 
-from app.services.availability import generate_slots
+from app.services.availability import (
+    Availability,
+    Slot,
+    filter_future_slots,
+    generate_slots,
+)
 
 
 def test_generate_slots_splits_lunch_and_converts_to_utc() -> None:
@@ -22,3 +27,21 @@ def test_generate_slots_splits_lunch_and_converts_to_utc() -> None:
 
 def test_generate_slots_returns_nothing_for_no_intervals() -> None:
     assert generate_slots(date(2026, 10, 19), "Africa/Nairobi", 30, []) == []
+
+
+def test_cached_slots_inside_the_hour_are_removed() -> None:
+    now = datetime(2026, 10, 19, 8, 0, tzinfo=UTC)
+    availability = Availability(
+        doctor_id=1,
+        day=now.date(),
+        timezone="Africa/Nairobi",
+        slot_minutes=30,
+        slots=(
+            Slot(now + timedelta(minutes=30), now + timedelta(minutes=60)),
+            Slot(now + timedelta(hours=2), now + timedelta(hours=2, minutes=30)),
+        ),
+    )
+
+    filtered = filter_future_slots(availability, now)
+
+    assert [slot.start_at for slot in filtered.slots] == [now + timedelta(hours=2)]

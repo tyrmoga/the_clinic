@@ -5,7 +5,6 @@ from app.core.security import (
     create_access_token,
     decode_access_token,
     hash_password,
-    needs_rehash,
     verify_password,
 )
 
@@ -17,7 +16,6 @@ def test_password_hash_round_trip() -> None:
     assert password_hash != password
     assert verify_password(password_hash, password) is True
     assert verify_password(password_hash, "wrong-password") is False
-    assert needs_rehash(password_hash) is False
 
 
 def test_access_token_round_trip() -> None:

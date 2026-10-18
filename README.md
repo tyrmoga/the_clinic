@@ -1,13 +1,11 @@
 # Clinic Appointment Booking System
 
-Savannah Informatics backend take-home assessment.
-
 | Submission | |
 |---|---|
 | Live API | `https://clinic-api-4b70.onrender.com` |
 | API docs | `https://clinic-api-4b70.onrender.com/docs` · `https://clinic-api-4b70.onrender.com/openapi.json` |
 | Repository | this repo, branch `main` |
-| Demo login | `demo1@example.com` / `DemoPass123!` (patients `1`–`5`) |
+| Demo login | `demo1@example.com` / `DemoPass123!` (login returns the patient id) |
 | Doctors | IDs `1`–`5` |
 
 
@@ -23,7 +21,7 @@ and `jq`.
 
 ```bash
 BASE_URL=https://clinic-api-4b70.onrender.com
-DATE=$(date -u -d 'next monday' +%F)
+DATE=$(python3 -c 'import datetime as d; from zoneinfo import ZoneInfo; t=d.datetime.now(ZoneInfo("Africa/Nairobi")).date(); print(t + d.timedelta(days=(7 - t.weekday()) % 7 or 7))')
 TOKEN=$(curl -s "$BASE_URL/auth/login" -H 'Content-Type: application/json' \
   -d '{"email":"demo1@example.com","password":"DemoPass123!"}' | jq -r .access_token)
 
@@ -34,7 +32,7 @@ curl -s "$BASE_URL/doctors/1/availability?date=$DATE" \
 # 2. book (start_at is canonical; start_time is accepted as an alias)
 APPT=$(curl -s -X POST "$BASE_URL/appointments" \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d "{\"doctor_id\":1,\"start_at\":\"${DATE}T09:00:00+03:00\",\"patient_id\":1}" \
+  -d "{\"doctor_id\":1,\"start_at\":\"${DATE}T09:00:00+03:00\"}" \
   | jq -r .id)
 
 # 3. reschedule
@@ -305,7 +303,7 @@ password `DemoPass123!`; doctors `1`–`5`. These are demo-only credentials; see
 
 ```bash
 BASE_URL=https://clinic-api-4b70.onrender.com
-DATE=$(date -u -d '+2 days' +%F)
+DATE=$(python3 -c 'import datetime as d; from zoneinfo import ZoneInfo; t=d.datetime.now(ZoneInfo("Africa/Nairobi")).date(); print(t + d.timedelta(days=(7 - t.weekday()) % 7 or 7))')
 TOKEN=$(curl -s "$BASE_URL/auth/login" -H 'Content-Type: application/json' \
   -d '{"email":"demo1@example.com","password":"DemoPass123!"}' | jq -r .access_token)
 
@@ -429,6 +427,14 @@ uvicorn app.main:app --reload
 
 Run the checks with `ruff check .` and `pytest -q`.
 
+For integration tests, set `TEST_DATABASE_URL` to a local test database whose
+name ends in `_test`, then run:
+
+```bash
+TEST_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/clinic_test \
+  RUN_DB_TESTS=1 pytest -q
+```
+
 Open `http://localhost:8000/docs` and log in with `demo1@example.com` /
 `DemoPass123!`.
 
@@ -440,6 +446,10 @@ Open `http://localhost:8000/docs` and log in with `demo1@example.com` /
   seed against the external database URL, then triggers the Render deploy hook.
 - `render.yaml` defines the web service and Postgres; `autoDeploy` is off so the
   deploy happens only after tests and migrations pass.
-- Repository secrets: `RENDER_DATABASE_URL` and `RENDER_DEPLOY_HOOK_URL`.
+- Repository secrets: `RENDER_DATABASE_URL` and `RENDER_DEPLOY_HOOK_URL`. The
+  deploy job fails if either is missing.
+- After the hook, CI polls `/readyz` and a demo login; a broken deploy fails the
+  workflow.
+- A daily cleanup workflow prunes expired idempotency keys.
 - Render keeps the previous deploy for rollback if the health check fails.
 - Full details: [Deployment (Render)](docs/deployment.md).

@@ -33,10 +33,6 @@ def verify_password(password_hash: str, password: str) -> bool:
         return False
 
 
-def needs_rehash(password_hash: str) -> bool:
-    return _hasher.check_needs_rehash(password_hash)
-
-
 def create_access_token(patient_id: int) -> tuple[str, int]:
     settings = get_settings()
     expires_in = settings.jwt_ttl_minutes * 60

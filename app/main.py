@@ -11,7 +11,7 @@ from app.api.auth import router as auth_router
 from app.api.availability import router as availability_router
 from app.api.health import router as health_router
 from app.api.patients import router as patients_router
-from app.core.config import get_settings
+from app.core.config import get_settings, validate_production_secrets
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import (
@@ -31,6 +31,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    validate_production_secrets(settings)
     configure_logging(settings.log_level)
 
     app = FastAPI(

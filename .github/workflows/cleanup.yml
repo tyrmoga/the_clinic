@@ -1,0 +1,39 @@
+name: Cleanup
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prune-idempotency-keys:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: ${{ secrets.RENDER_DATABASE_URL }}
+      APP_ENV: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Require database secret
+        if: env.DATABASE_URL == ''
+        run: |
+          echo "::error::RENDER_DATABASE_URL must be set"
+          exit 1
+
+      - name: Prune expired idempotency keys
+        run: python -m app.cleanup

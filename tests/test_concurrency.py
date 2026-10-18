@@ -1,6 +1,7 @@
 import asyncio
 import os
 from datetime import UTC, date, datetime, time, timedelta
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -9,11 +10,13 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.errors import AppError
-from app.db.models import Appointment, AppointmentEvent, AppointmentStatus
+from app.db.models import Appointment, AppointmentEvent, AppointmentStatus, IdempotencyKey
 from app.db.session import SessionLocal
+from app.schemas.appointment import BookingRequest
 from app.services.appointments import reschedule_appointment
 from app.services.availability import clear_availability_cache
 from app.services.booking import BookingOutcome, create_appointment
+from app.services.idempotency import hash_request
 
 pytestmark = pytest.mark.skipif(
     os.getenv("RUN_DB_TESTS") != "1",
@@ -30,6 +33,7 @@ def clean_appointments() -> None:
         with Session(sync_engine) as session:
             session.execute(delete(AppointmentEvent))
             session.execute(delete(Appointment))
+            session.execute(delete(IdempotencyKey))
             session.commit()
         clear_availability_cache()
 
@@ -55,6 +59,24 @@ async def _book(patient_id: int, start_at: datetime) -> BookingOutcome:
             doctor_id=1,
             start_at=start_at,
             body_patient_id=None,
+        )
+
+
+async def _book_idempotent(
+    patient_id: int,
+    start_at: datetime,
+    key: str,
+    request_hash: str,
+) -> BookingOutcome:
+    async with SessionLocal() as session:
+        return await create_appointment(
+            session,
+            patient_id=patient_id,
+            doctor_id=1,
+            start_at=start_at,
+            body_patient_id=None,
+            idempotency_key=key,
+            idempotency_hash=request_hash,
         )
 
 
@@ -127,3 +149,27 @@ async def test_two_reschedules_racing_for_one_slot() -> None:
     assert errors[0].status_code == 409
     assert errors[0].code == "slot_taken"
     assert _booked_count(target) == 1
+
+
+async def test_two_requests_with_the_same_idempotency_key() -> None:
+    day = _next_weekday()
+    start_at = _utc(day, 9)
+    key = uuid4().hex
+    request_hash = hash_request(BookingRequest(doctor_id=1, start_at=start_at, patient_id=1))
+
+    results = await asyncio.gather(
+        _book_idempotent(1, start_at, key, request_hash),
+        _book_idempotent(1, start_at, key, request_hash),
+        return_exceptions=True,
+    )
+
+    assert not any(isinstance(result, Exception) for result in results)
+    ids = {
+        str(result.appointment.id)
+        if result.appointment is not None
+        else str(result.stored.body["id"])
+        for result in results
+        if isinstance(result, BookingOutcome)
+    }
+    assert len(ids) == 1
+    assert _booked_count(start_at) == 1

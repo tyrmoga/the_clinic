@@ -1,8 +1,9 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 
 from app.core.config import Settings
-from app.core.rate_limit import RateLimitMiddleware, TokenBucket, limit_scope
+from app.core.rate_limit import RateLimitMiddleware, TokenBucket, limit_scope, rate_key
 
 
 def test_token_bucket_allows_burst_then_refills() -> None:
@@ -49,3 +50,33 @@ def test_middleware_returns_429_with_retry_after() -> None:
         assert response.status_code == 429
         assert response.headers["retry-after"] == "60"
         assert response.json()["error"]["code"] == "rate_limited"
+
+
+def test_rate_key_uses_the_last_forwarded_address() -> None:
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/appointments",
+        "scheme": "http",
+        "query_string": b"",
+        "headers": [(b"x-forwarded-for", b"1.2.3.4, 5.6.7.8")],
+        "client": ("9.9.9.9", 1234),
+        "server": ("testserver", 80),
+    }
+
+    assert rate_key(Request(scope)) == "ip:5.6.7.8"
+
+
+def test_rate_key_falls_back_to_the_client_address() -> None:
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/appointments",
+        "scheme": "http",
+        "query_string": b"",
+        "headers": [],
+        "client": ("9.9.9.9", 1234),
+        "server": ("testserver", 80),
+    }
+
+    assert rate_key(Request(scope)) == "ip:9.9.9.9"

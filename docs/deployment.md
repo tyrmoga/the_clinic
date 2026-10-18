@@ -31,7 +31,7 @@ validation, auth, rate limiting, and migrations.
 | Resource | Setting |
 |---|---|
 | Web service | Python runtime, build `pip install -r requirements.txt`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"` |
-| Health check | `/healthz` |
+| Health check | `/readyz` |
 | Postgres | Internal connection URL; paid plan recommended |
 | Environment | Set in the Render dashboard, never in git |
 | Auto-deploy | Off; GitHub Actions triggers the deploy hook after tests and migrations |
@@ -93,8 +93,8 @@ free web + paid Postgres.
   failed deploy does not leave the old version broken.
 - The deploy job also runs the idempotent seed (`python -m app.seed`) against the
   external URL, so demo doctors and patients exist on every deploy.
-- Run `python -m app.cleanup` daily (Render cron job or GitHub Actions schedule)
-  to prune idempotency keys older than 24 hours.
+- A daily GitHub Actions workflow (`.github/workflows/cleanup.yml`) runs
+  `python -m app.cleanup` to prune idempotency keys older than 24 hours.
 - Seed creates doctors `1`–`5` and `demo1@example.com` … `demo5@example.com` with
   password `DemoPass123!` (demo environment only).
 
@@ -113,8 +113,9 @@ On merge to `main`:
    (`RENDER_DATABASE_URL`), then run `python -m app.seed`.
 3. Trigger the Render deploy hook (`RENDER_DEPLOY_HOOK_URL`).
 4. Render keeps the previous deploy for rollback if the health check fails.
-5. If both secrets are absent, the deploy job skips cleanly so forks and local
-   copies do not fail.
+5. The deploy job fails if either secret is missing. After the hook, it polls
+   `/readyz` and a demo login until the live service answers, so a broken deploy
+   fails CI.
 
 ## App-level hardening
 
@@ -138,7 +139,7 @@ Render removes host/TLS work, but the API still has to defend itself:
 - Postgres uses the internal URL only; no public database access.
 - Secrets live in Render environment variables; no `.env` in git.
 - Do not log tokens, passwords, or request bodies containing them.
-- `/healthz` for liveness and `/readyz` for database connectivity.
+- `/healthz` for liveness; `/readyz` checks the database and that migrations have run.
 
 ## Backups and recovery
 

@@ -113,14 +113,12 @@ jobs:
         env:
           DATABASE_URL: ${{ env.RENDER_DATABASE_URL }}
           APP_ENV: production
-          JWT_SECRET: migration-only-placeholder-use-32-bytes
         run: alembic upgrade head
 
       - name: Seed demo data
         env:
           DATABASE_URL: ${{ env.RENDER_DATABASE_URL }}
           APP_ENV: production
-          JWT_SECRET: migration-only-placeholder-use-32-bytes
         run: python -m app.seed
 
       - name: Trigger Render deploy

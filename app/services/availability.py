@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
@@ -128,6 +128,14 @@ async def _load_availability(
     )
 
 
+def filter_future_slots(availability: Availability, now: datetime) -> Availability:
+    cutoff = now + timedelta(hours=1)
+    return replace(
+        availability,
+        slots=tuple(slot for slot in availability.slots if slot.start_at >= cutoff),
+    )
+
+
 def _cache_key(doctor_id: int, day: date) -> tuple[int, str]:
     return doctor_id, day.isoformat()
 
@@ -140,7 +148,7 @@ async def get_availability(
     key = _cache_key(doctor_id, day)
     cached = _cache.get(key)
     if cached is not None:
-        return cached
+        return filter_future_slots(cached, datetime.now(UTC))
 
     doctor = await session.get(Doctor, doctor_id)
     if doctor is None:
