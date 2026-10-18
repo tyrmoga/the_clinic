@@ -10,9 +10,11 @@ _Answer:_
 
 ## 2. Give one example where an AI suggestion improved your work. What did you prompt it with?
 
-**What I prompted:** _Answer:_
+**What I prompted:** _Answer — use the full-repo audit prompt here._
 
-**What improved:** _Answer:_
+**What improved:** _Answer — mention what the audit caught and changed._
+
+_Use the repository audit as this example: the review that produced the must-fix and should-fix findings._
 
 ## 3. Give one example where AI output was wrong or incomplete and how you caught it.
 
