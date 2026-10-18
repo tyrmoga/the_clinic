@@ -2,9 +2,17 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_serializer,
+)
 
 from app.db.models import AppointmentStatus
+from app.schemas.common import to_utc_iso
 
 
 class BookingRequest(BaseModel):
@@ -42,6 +50,17 @@ class AppointmentResponse(BaseModel):
     cancelled_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+    @field_serializer(
+        "start_at",
+        "end_at",
+        "cancelled_at",
+        "created_at",
+        "updated_at",
+        when_used="json",
+    )
+    def serialize_datetime(self, value: datetime | None) -> str | None:
+        return to_utc_iso(value)
 
 
 class CancelRequest(BaseModel):
