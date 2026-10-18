@@ -4,8 +4,8 @@ Savannah Informatics backend take-home assessment.
 
 | Submission | |
 |---|---|
-| Live API | `https://<service>.onrender.com`|
-| API docs | `https://<service>.onrender.com/docs` · `https://<service>.onrender.com/openapi.json` |
+| Live API | `https://clinic-api-4b70.onrender.com` |
+| API docs | `https://clinic-api-4b70.onrender.com/docs` · `https://clinic-api-4b70.onrender.com/openapi.json` |
 | Repository | this repo, branch `main` |
 | Demo login | `demo1@example.com` / `DemoPass123!` (patients `1`–`5`) |
 | Doctors | IDs `1`–`5` |
@@ -22,7 +22,7 @@ and paste the bearer token from the login call. The script below requires `curl`
 and `jq`.
 
 ```bash
-BASE_URL=https://<service>.onrender.com
+BASE_URL=https://clinic-api-4b70.onrender.com
 DATE=$(date -u -d 'next monday' +%F)
 TOKEN=$(curl -s "$BASE_URL/auth/login" -H 'Content-Type: application/json' \
   -d '{"email":"demo1@example.com","password":"DemoPass123!"}' | jq -r .access_token)
@@ -304,7 +304,7 @@ password `DemoPass123!`; doctors `1`–`5`. These are demo-only credentials; see
 [Deployment](docs/deployment.md#demo-data-and-access).
 
 ```bash
-BASE_URL=https://<service>.onrender.com
+BASE_URL=https://clinic-api-4b70.onrender.com
 DATE=$(date -u -d '+2 days' +%F)
 TOKEN=$(curl -s "$BASE_URL/auth/login" -H 'Content-Type: application/json' \
   -d '{"email":"demo1@example.com","password":"DemoPass123!"}' | jq -r .access_token)

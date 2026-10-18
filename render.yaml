@@ -17,7 +17,7 @@ services:
           name: clinic-db
           property: connectionString
       - key: TRUSTED_HOSTS
-        value: "*"
+        value: "clinic-api-4b70.onrender.com"
       - key: RATE_LIMIT_ENABLED
         value: "true"
       - key: LOG_LEVEL
