@@ -31,7 +31,7 @@ def normalize_start(start_at: datetime, doctor: Doctor) -> datetime:
     return start_at.astimezone(UTC)
 
 
-def _is_slot_conflict(exc: IntegrityError) -> bool:
+def is_slot_conflict(exc: IntegrityError) -> bool:
     diag = getattr(exc.orig, "diag", None)
     return getattr(diag, "constraint_name", None) == "one_active_booking_per_slot"
 
@@ -41,7 +41,7 @@ def _is_idempotency_conflict(exc: IntegrityError) -> bool:
     return getattr(diag, "constraint_name", None) == "idempotency_keys_patient_endpoint_key_key"
 
 
-async def _slot_for_start(
+async def slot_for_start(
     session: AsyncSession,
     doctor: Doctor,
     start_at: datetime,
@@ -98,7 +98,7 @@ async def create_appointment(
     if db_now is None:
         raise AppError(503, "database_unavailable", "Database time is unavailable.")
 
-    slot = await _slot_for_start(session, doctor, start_at, db_now)
+    slot = await slot_for_start(session, doctor, start_at, db_now)
 
     appointment = Appointment(
         doctor_id=doctor.id,
@@ -138,7 +138,7 @@ async def create_appointment(
             if stored is not None:
                 return BookingOutcome(stored=stored)
 
-        if _is_slot_conflict(exc):
+        if is_slot_conflict(exc):
             raise AppError(
                 409,
                 "slot_taken",

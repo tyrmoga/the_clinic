@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Header, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,7 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_patient_id
 from app.db.models import Appointment
 from app.db.session import get_session
-from app.schemas.appointment import AppointmentResponse, BookingRequest
+from app.schemas.appointment import (
+    AppointmentResponse,
+    BookingRequest,
+    CancelRequest,
+    RescheduleRequest,
+)
+from app.services.appointments import cancel_appointment, reschedule_appointment
 from app.services.booking import create_appointment
 from app.services.idempotency import hash_request, validate_key
 
@@ -41,3 +49,33 @@ async def book(
 
     assert outcome.appointment is not None
     return outcome.appointment
+
+
+@router.patch("/{appointment_id}/cancel", response_model=AppointmentResponse)
+async def cancel(
+    appointment_id: UUID,
+    payload: CancelRequest,
+    patient_id: int = Depends(get_current_patient_id),
+    session: AsyncSession = Depends(get_session),
+) -> Appointment:
+    return await cancel_appointment(
+        session,
+        appointment_id=appointment_id,
+        patient_id=patient_id,
+        reason=payload.reason,
+    )
+
+
+@router.patch("/{appointment_id}/reschedule", response_model=AppointmentResponse)
+async def reschedule(
+    appointment_id: UUID,
+    payload: RescheduleRequest,
+    patient_id: int = Depends(get_current_patient_id),
+    session: AsyncSession = Depends(get_session),
+) -> Appointment:
+    return await reschedule_appointment(
+        session,
+        appointment_id=appointment_id,
+        patient_id=patient_id,
+        start_at=payload.start_at,
+    )
