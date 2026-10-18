@@ -8,7 +8,19 @@ Phone = Annotated[str, StringConstraints(strip_whitespace=True, max_length=32)]
 
 
 class RegisterRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "email": "new.patient@example.com",
+                    "password": "Password123!",
+                    "full_name": "New Patient",
+                    "phone": "+254700000010",
+                }
+            ]
+        },
+    )
 
     email: EmailStr
     password: Password
@@ -17,7 +29,12 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [{"email": "demo1@example.com", "password": "DemoPass123!"}]
+        },
+    )
 
     email: EmailStr
     password: Annotated[str, StringConstraints(max_length=128)]

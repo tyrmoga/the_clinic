@@ -20,7 +20,16 @@ from app.services.idempotency import hash_request, validate_key
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
 
-@router.post("", response_model=AppointmentResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=AppointmentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Book an appointment",
+    description=(
+        "Book a free slot. Accepts start_time as an alias for start_at and an "
+        "optional patient_id assertion that must match the token."
+    ),
+)
 async def book(
     payload: BookingRequest,
     patient_id: int = Depends(get_current_patient_id),
@@ -51,7 +60,12 @@ async def book(
     return outcome.appointment
 
 
-@router.patch("/{appointment_id}/cancel", response_model=AppointmentResponse)
+@router.patch(
+    "/{appointment_id}/cancel",
+    response_model=AppointmentResponse,
+    summary="Cancel an appointment",
+    description="Cancel a future appointment with a reason; the slot becomes free.",
+)
 async def cancel(
     appointment_id: UUID,
     payload: CancelRequest,
@@ -66,7 +80,15 @@ async def cancel(
     )
 
 
-@router.patch("/{appointment_id}/reschedule", response_model=AppointmentResponse)
+@router.patch(
+    "/{appointment_id}/reschedule",
+    response_model=AppointmentResponse,
+    summary="Reschedule an appointment",
+    description=(
+        "Move a future appointment to another slot. A same-slot request is a "
+        "200 no-op, even inside the 1-hour window."
+    ),
+)
 async def reschedule(
     appointment_id: UUID,
     payload: RescheduleRequest,

@@ -8,7 +8,19 @@ from app.db.models import AppointmentStatus
 
 
 class BookingRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "doctor_id": 1,
+                    "start_at": "2026-10-20T09:00:00+03:00",
+                    "patient_id": 1,
+                }
+            ]
+        },
+    )
 
     doctor_id: int = Field(gt=0)
     start_at: datetime = Field(
@@ -33,7 +45,10 @@ class AppointmentResponse(BaseModel):
 
 
 class CancelRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={"examples": [{"reason": "Patient unwell"}]},
+    )
 
     reason: Annotated[
         str,
@@ -42,7 +57,11 @@ class CancelRequest(BaseModel):
 
 
 class RescheduleRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        json_schema_extra={"examples": [{"start_at": "2026-10-21T10:30:00+03:00"}]},
+    )
 
     start_at: datetime = Field(
         validation_alias=AliasChoices("start_at", "start_time"),

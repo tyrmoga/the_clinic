@@ -10,7 +10,12 @@ from app.services.patient_appointments import list_patient_appointments
 router = APIRouter(prefix="/patients", tags=["patients"])
 
 
-@router.get("/{patient_id}/appointments", response_model=AppointmentListResponse)
+@router.get(
+    "/{patient_id}/appointments",
+    response_model=AppointmentListResponse,
+    summary="List a patient's upcoming appointments",
+    description="Keyset-paginated list of booked appointments starting in the future.",
+)
 async def list_appointments(
     patient_id: int,
     limit: int = Query(default=20, ge=1, le=100),

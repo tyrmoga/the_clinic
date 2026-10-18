@@ -33,6 +33,8 @@ def _normalize_email(email: str) -> str:
     "/register",
     response_model=TokenResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Register a patient",
+    description="Create a patient account and return a bearer token.",
 )
 async def register(
     payload: RegisterRequest,
@@ -67,7 +69,12 @@ async def register(
     )
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+    summary="Log in",
+    description="Exchange email and password for a bearer token.",
+)
 async def login(
     payload: LoginRequest,
     session: AsyncSession = Depends(get_session),
@@ -88,6 +95,11 @@ async def login(
     )
 
 
-@router.get("/me", response_model=PatientResponse)
+@router.get(
+    "/me",
+    response_model=PatientResponse,
+    summary="Current patient",
+    description="Return the patient identified by the bearer token.",
+)
 async def me(patient: Patient = Depends(get_current_patient)) -> Patient:
     return patient

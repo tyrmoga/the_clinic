@@ -43,6 +43,21 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
+        openapi_tags=[
+            {"name": "auth", "description": "Register, log in, and read the current patient."},
+            {
+                "name": "availability",
+                "description": "Free slots derived from working hours and active bookings.",
+            },
+            {
+                "name": "appointments",
+                "description": "Book, cancel, and reschedule appointments.",
+            },
+            {
+                "name": "patients",
+                "description": "The authenticated patient's upcoming appointments.",
+            },
+        ],
         lifespan=lifespan,
     )
 
