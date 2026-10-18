@@ -1,6 +1,9 @@
 # Data model
 
-Back to the [README](../README.md).
+Back to the [README](../README.md). The deferred waitlist schema is in
+[Future extensions](future-extensions.md); changing the slot length is covered in
+[Changing slot duration](slot-duration-migration.md). A rendered ERD is in
+[Diagrams](diagrams.md#1-erd-implemented-schema).
 
 Store: **PostgreSQL (relational)** — joins, referential integrity, and (decisively)
 a database-enforced uniqueness constraint. NoSQL buys nothing here.
@@ -10,7 +13,8 @@ CREATE TABLE doctors (
   id           BIGSERIAL PRIMARY KEY,
   full_name    TEXT NOT NULL,
   timezone     TEXT NOT NULL DEFAULT 'Africa/Nairobi',
-  slot_minutes SMALLINT NOT NULL DEFAULT 30 CHECK (slot_minutes = 30)
+  slot_minutes SMALLINT NOT NULL DEFAULT 30
+               CONSTRAINT slot_minutes_is_30 CHECK (slot_minutes = 30)
 );
 
 CREATE TABLE doctor_working_hours (
@@ -44,8 +48,14 @@ CREATE TABLE appointments (
   cancelled_at        TIMESTAMPTZ,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK (end_at = start_at + interval '30 minutes'),
-  CHECK (status <> 'cancelled' OR (cancellation_reason IS NOT NULL AND cancelled_at IS NOT NULL))
+  CONSTRAINT end_at_is_30_min CHECK (end_at = start_at + interval '30 minutes'),
+  CONSTRAINT cancelled_fields CHECK (
+    status <> 'cancelled'
+    OR (cancellation_reason IS NOT NULL AND cancelled_at IS NOT NULL)
+  ),
+  CONSTRAINT cancellation_reason_length CHECK (
+    cancellation_reason IS NULL OR char_length(cancellation_reason) BETWEEN 1 AND 500
+  )
 );
 
 -- THE invariant: at most one *active* booking per doctor per slot.
@@ -54,10 +64,9 @@ CREATE UNIQUE INDEX one_active_booking_per_slot
   ON appointments (doctor_id, start_at) WHERE status = 'booked';
 
 -- access paths
+-- the partial unique index above already serves (doctor_id, start_at) lookups
 CREATE INDEX appointments_patient_upcoming
   ON appointments (patient_id, start_at) WHERE status = 'booked';
-CREATE INDEX appointments_doctor_day
-  ON appointments (doctor_id, start_at) WHERE status = 'booked';
 
 -- audit trail for reschedules (cheap, keeps the unique index simple)
 CREATE TABLE appointment_events (
@@ -70,28 +79,8 @@ CREATE TABLE appointment_events (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- waitlist: FIFO per (doctor_id, date); an offer is a right of first refusal,
--- not a hold — offered slots stay in availability until confirmed.
-CREATE TABLE waitlist_entries (
-  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  doctor_id        BIGINT NOT NULL REFERENCES doctors(id),
-  patient_id       BIGINT NOT NULL REFERENCES patients(id),
-  date             DATE NOT NULL,
-  status           TEXT NOT NULL DEFAULT 'waiting'
-                   CHECK (status IN ('waiting','offered','booked','cancelled','expired')),
-  offered_start_at TIMESTAMPTZ,
-  offer_expires_at TIMESTAMPTZ,          -- offered_at + 15 min; NULL unless 'offered'
-  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
-);
--- at most one *active* waitlist row per patient per doctor-day
--- (re-joining is allowed after the old row is cancelled/expired/booked)
-CREATE UNIQUE INDEX one_active_waitlist_entry
-  ON waitlist_entries (doctor_id, patient_id, date)
-  WHERE status IN ('waiting', 'offered');
--- queue scan: head of line for a freed slot on a given day
-CREATE INDEX waitlist_queue
-  ON waitlist_entries (doctor_id, date, created_at)
-  WHERE status = 'waiting';
+-- The waitlist tables are intentionally absent. They live in
+-- docs/future-extensions.md and are not part of this build.
 
 -- Idempotency-Key store: 24 h TTL, pruned by a daily cleanup statement
 CREATE TABLE idempotency_keys (
@@ -111,8 +100,6 @@ CREATE INDEX idempotency_keys_created ON idempotency_keys (created_at);
 **Keys and access patterns:**
 - Booking/availability: look up by `(doctor_id, start_at)` — served by the unique
   index; availability reads `doctor_working_hours` by `(doctor_id, weekday)`.
-- Waitlist: queue scan on `(doctor_id, date, created_at)` partial index; confirm
-  hits the same `(doctor_id, start_at)` unique index as a fresh booking.
 - Idempotency: unique lookup on `(patient_id, endpoint, key)`.
 - Patient listing (bonus): `(patient_id, start_at)` index, keyset cursor on
   `(start_at, id)`.
@@ -125,7 +112,10 @@ CREATE INDEX idempotency_keys_created ON idempotency_keys (created_at);
    zoneinfo database.
 3. For the day's `weekday`, take each `(start_time, end_time)` interval and emit
    slots every `slot_minutes` (e.g. `generate_series`).
-4. Exclude slots that collide with an active (`status='booked'`) appointment,
-   that have already started, and that start less than 1 hour from now (core).
-   Do **not** exclude waitlist-offered slots — offers don't hold
-   ([decision #11](decisions.md)).
+4. Exclude slots that collide with an active (`status='booked'`) appointment and
+   that start less than 1 hour from now (the bonus rule, which also subsumes slots
+   that have already started). Collision is a **range overlap** check
+   (`appointment.start_at < slot_end AND appointment.end_at > slot_start`); with a
+   clinic-wide 30-minute grid this is equivalent to comparing `start_at`, and it
+   remains correct if slot lengths change later
+   ([Changing slot duration](slot-duration-migration.md)).

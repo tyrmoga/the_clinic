@@ -6,16 +6,16 @@ Back to the [README](../README.md). Estimates are in
 **Current bottleneck:** none expected from the §2 estimates (not yet measured). On the **supply** axis the single
 Postgres node is the eventual ceiling, but the write path is supply-capped and
 tiny. On the **demand** axis the first pressure is the availability **read** path
-during a flash crowd — and an edge rate limit plus a 5–10 s cache absorbs it long
+during a flash crowd — and an in-app rate limit plus a 5–10 s cache absorbs it long
 before the DB is the problem.
 
 - **Patient demand 10× (pandemic, same 5 doctors):** no schema change. The rate
   limit and the 5–10 s availability cache are already on by default; failed
-  attempts are cheap `409`s the client converts into waitlist joins, and each
-  cancel recycles a slot through the FIFO offer. Successful bookings stay at
-  80/day.
-- **Supply 10× (50 doctors):** no change. Optionally add a pooler and 2 app
-  instances.
+  attempts are cheap `409`s and each cancel immediately frees the slot again.
+  Successful bookings stay at 80/day. A waitlist is the product response if this
+  becomes persistent, but it is deferred (see [Future extensions](future-extensions.md)).
+- **Supply 10× (50 doctors):** no change. Optionally upgrade the Render instance
+  and add a pooler plus a second app instance.
 - **Supply 100× (500 doctors):** still one Postgres node comfortably. Add
   `clinic_id` to all tables and scope the unique index to
   `(clinic_id, doctor_id, start_at)` *if* growth means multiple clinics. Partition
