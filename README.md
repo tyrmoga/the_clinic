@@ -7,6 +7,7 @@
 | Repository | this repo, branch `main` |
 | Demo login | `demo1@example.com` / `DemoPass123!` (login returns the patient id) |
 | Doctors | IDs `1`–`5` |
+| AI reflection | [docs/ai-reflection.md](docs/ai-reflection.md) |
 
 
 > A small clinic (5 doctors) needs patients to book 30-minute appointment slots
@@ -411,6 +412,7 @@ the external database URL. See [Deployment (Render)](docs/deployment.md) and the
 - [Deployment (Render)](docs/deployment.md) — Render resources, free-tier limits, CI/CD, backups
 - [Changing slot duration](docs/slot-duration-migration.md) — zero-downtime path for 100M rows
 - [Future extensions](docs/future-extensions.md) — deferred waitlist design
+- [AI reflection](docs/ai-reflection.md) — Section 4 answers (to be completed)
 
 ## 6. Run locally
 
@@ -453,3 +455,8 @@ Open `http://localhost:8000/docs` and log in with `demo1@example.com` /
 - A daily cleanup workflow prunes expired idempotency keys.
 - Render keeps the previous deploy for rollback if the health check fails.
 - Full details: [Deployment (Render)](docs/deployment.md).
+
+## 8. Section 4: AI reflection
+
+The four reflection questions are answered in
+[docs/ai-reflection.md](docs/ai-reflection.md).
