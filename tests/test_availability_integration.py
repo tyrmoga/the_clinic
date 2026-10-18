@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, delete
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.db.models import Appointment, AppointmentStatus
+from app.db.models import Appointment, AppointmentEvent, AppointmentStatus
 from app.services.availability import clear_availability_cache
 
 pytestmark = pytest.mark.skipif(
@@ -25,6 +25,7 @@ sync_engine = create_engine(get_settings().database_url, pool_pre_ping=True)
 def clean_appointments() -> None:
     def cleanup() -> None:
         with Session(sync_engine) as session:
+            session.execute(delete(AppointmentEvent))
             session.execute(delete(Appointment))
             session.commit()
         clear_availability_cache()
@@ -83,6 +84,7 @@ def test_availability_returns_the_weekly_grid(client: TestClient) -> None:
     assert body["date"] == day.isoformat()
     assert body["timezone"] == "Africa/Nairobi"
     assert body["slot_minutes"] == 30
+    assert body["slots"][0]["start_at"].endswith("Z")
     starts = _slot_starts(response)
     assert len(starts) == 16
     assert starts[0] == datetime.combine(day, time(8, 0), tzinfo=Nairobi).astimezone(UTC)

@@ -106,6 +106,8 @@ def test_book_creates_appointment_and_event(client: TestClient) -> None:
     assert body["doctor_id"] == 1
     assert body["patient_id"] == 1
     assert body["status"] == "booked"
+    assert body["start_at"].endswith("Z")
+    assert body["created_at"].endswith("Z")
     assert datetime.fromisoformat(body["start_at"]) == datetime(
         day.year, day.month, day.day, 6, 0, tzinfo=UTC
     )
