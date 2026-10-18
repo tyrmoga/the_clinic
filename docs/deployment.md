@@ -46,7 +46,8 @@ Environment variables: `DATABASE_URL`, `JWT_SECRET`, `JWT_TTL_MINUTES`,
 
 `DATABASE_URL` comes from the Render Postgres internal URL. `JWT_SECRET` is a
 generated value; rotate it by deploying a new secret and accepting the old token
-window if needed. The **external** URL (used from CI for migrations/seed) requires
+window if needed. Set `TRUSTED_HOSTS` to the Render hostname once it is known;
+the Blueprint uses `*` so the first deploy can boot before the URL is configured. The **external** URL (used from CI for migrations/seed) requires
 TLS; enable it for your driver (e.g. `sslmode=require` for libpq,
 `ssl=require` for asyncpg).
 
@@ -92,6 +93,8 @@ free web + paid Postgres.
   failed deploy does not leave the old version broken.
 - The deploy job also runs the idempotent seed (`python -m app.seed`) against the
   external URL, so demo doctors and patients exist on every deploy.
+- Run `python -m app.cleanup` daily (Render cron job or GitHub Actions schedule)
+  to prune idempotency keys older than 24 hours.
 - Seed creates doctors `1`–`5` and `demo1@example.com` … `demo5@example.com` with
   password `DemoPass123!` (demo environment only).
 
