@@ -75,3 +75,48 @@ jobs:
 
       - name: Test
         run: pytest -q
+
+  deploy:
+    name: Deploy to Render
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      RENDER_DATABASE_URL: ${{ secrets.RENDER_DATABASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Migrate production database
+        if: env.RENDER_DATABASE_URL != ''
+        env:
+          DATABASE_URL: ${{ env.RENDER_DATABASE_URL }}
+          APP_ENV: production
+          JWT_SECRET: migration-only-placeholder-use-32-bytes
+        run: alembic upgrade head
+
+      - name: Seed demo data
+        if: env.RENDER_DATABASE_URL != ''
+        env:
+          DATABASE_URL: ${{ env.RENDER_DATABASE_URL }}
+          APP_ENV: production
+          JWT_SECRET: migration-only-placeholder-use-32-bytes
+        run: python -m app.seed
+
+      - name: Trigger Render deploy
+        if: env.RENDER_DEPLOY_HOOK_URL != ''
+        run: curl --fail --silent --show-error --retry 3 -X POST "$RENDER_DEPLOY_HOOK_URL"

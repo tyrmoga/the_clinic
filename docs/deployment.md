@@ -2,7 +2,7 @@
 
 Back to the [README](../README.md). This is the target deployment for the
 assessment: Render web service + Render Postgres, with GitHub Actions running
-tests and a deploy on merge to `main`.
+tests, migrations, and the deploy on merge to `main`.
 
 ## Topology
 
@@ -20,7 +20,7 @@ Render Postgres ── source of truth; not publicly reachable
    │
    └─ managed backups / PITR on paid plans
 
-GitHub Actions ── tests on PR ── deploy on merge to main ──> Render
+GitHub Actions ── tests on PR ── migrations + seed + deploy hook on main ──> Render
 ```
 
 Render manages the host, TLS certificates, and the network. The app owns
@@ -34,18 +34,34 @@ validation, auth, rate limiting, and migrations.
 | Health check | `/healthz` |
 | Postgres | Internal connection URL; paid plan recommended |
 | Environment | Set in the Render dashboard, never in git |
-| Auto-deploy | On, branch `main` |
-| Pre-deploy | `alembic upgrade head` — paid web services only |
+| Auto-deploy | Off; GitHub Actions triggers the deploy hook after tests and migrations |
+| Python | `.python-version` pins 3.12 |
+| Pre-deploy | `alembic upgrade head` — optional on paid web services |
 
 Environment variables: `DATABASE_URL`, `JWT_SECRET`, `JWT_TTL_MINUTES`,
-`APP_ENV`, `AVAILABILITY_CACHE_TTL_SECONDS`, `RATE_LIMIT_AUTH_PER_MINUTE`,
-`RATE_LIMIT_BOOKING_PER_MINUTE`, `TRUSTED_HOSTS`.
+`APP_ENV`, `AVAILABILITY_CACHE_TTL_SECONDS`, `RATE_LIMIT_ENABLED`,
+`RATE_LIMIT_AUTH_PER_MINUTE`, `RATE_LIMIT_AVAILABILITY_PER_MINUTE`,
+`RATE_LIMIT_BOOKING_PER_MINUTE`, `RATE_LIMIT_DEFAULT_PER_MINUTE`,
+`MAX_BODY_BYTES`, `LOG_LEVEL`, `TRUSTED_HOSTS`, `CORS_ORIGINS`.
 
 `DATABASE_URL` comes from the Render Postgres internal URL. `JWT_SECRET` is a
 generated value; rotate it by deploying a new secret and accepting the old token
 window if needed. The **external** URL (used from CI for migrations/seed) requires
 TLS; enable it for your driver (e.g. `sslmode=require` for libpq,
 `ssl=require` for asyncpg).
+
+## Blueprint
+
+`render.yaml` defines the web service and database. Apply it as a Render
+Blueprint, then set these GitHub repository secrets:
+
+- `RENDER_DATABASE_URL` — the Postgres **external** URL, with TLS enabled.
+- `RENDER_DEPLOY_HOOK_URL` — the web service's deploy hook.
+
+The Blueprint keeps `autoDeploy: false`: the CI deploy job runs migrations, seeds
+demo data, and only then triggers the hook. If you prefer Render's native
+auto-deploy, enable it in the dashboard and remove the hook step, but ensure
+migrations run before the new version receives traffic.
 
 ## Free-tier reality
 
@@ -69,13 +85,13 @@ free web + paid Postgres.
 - **Paid web service:** set the Render pre-deploy command to
   `alembic upgrade head`; it runs before the new version receives traffic.
 - **Free web service:** Render does not support pre-deploy commands on free
-  instances. Run the migration from the GitHub Actions deploy workflow against
-  the Postgres **external** URL (stored as a repository secret), then trigger the
-  deploy. Do not run migrations at app startup with multiple instances.
+  instances. The GitHub Actions deploy job runs the migration against the
+  Postgres **external** URL before triggering the deploy. Do not run migrations
+  at app startup with multiple instances.
 - Migrations must be backward-compatible for one release (expand/contract), so a
   failed deploy does not leave the old version broken.
-- After the first deploy, run the idempotent seed once from a trusted local or CI
-  environment using the external `DATABASE_URL`.
+- The deploy job also runs the idempotent seed (`python -m app.seed`) against the
+  external URL, so demo doctors and patients exist on every deploy.
 - Seed creates doctors `1`–`5` and `demo1@example.com` … `demo5@example.com` with
   password `DemoPass123!` (demo environment only).
 
@@ -90,12 +106,12 @@ On every pull request:
 
 On merge to `main`:
 1. Run the same tests.
-2. If the web service is on the free tier, run `alembic upgrade head` against the
-   Postgres **external** URL (repository secret) before deploying.
-3. Deploy through Render auto-deploy (branch protection requires the PR checks)
-   or call a Render deploy hook from the workflow after tests pass.
-4. On a paid web service, the pre-deploy command runs migrations.
-5. Render keeps the previous deploy for rollback if the health check fails.
+2. Run `alembic upgrade head` against the Postgres **external** URL
+   (`RENDER_DATABASE_URL`), then run `python -m app.seed`.
+3. Trigger the Render deploy hook (`RENDER_DEPLOY_HOOK_URL`).
+4. Render keeps the previous deploy for rollback if the health check fails.
+5. If both secrets are absent, the deploy job skips cleanly so forks and local
+   copies do not fail.
 
 ## App-level hardening
 
@@ -143,6 +159,8 @@ The README publishes the live URL, demo credentials, and doctor IDs.
 ## Submission checklist
 
 - [ ] Live Render URL reachable over HTTPS.
+- [ ] `render.yaml` applied and `RENDER_DATABASE_URL` / `RENDER_DEPLOY_HOOK_URL`
+      secrets configured.
 - [ ] `main` deploys automatically; pipeline described in the README.
 - [ ] Seeded doctors and demo patients documented.
 - [ ] Tests run on every PR.
