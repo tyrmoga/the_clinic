@@ -2,11 +2,8 @@
 
 Back to the [README](../README.md).
 
-Answer the four questions below. Bullet points are fine.
-
 ## 1. What did you use AI for across the four sections?
 
-_Answer:_ 
 AI was used across all four sections. In Section 1 it was a sounding board for the
 read-heavy workload, the TOCTOU (time-of-check/time-of-use) race on booking,
 consistency and availability trade-offs, and rough throughput and latency

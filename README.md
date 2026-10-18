@@ -412,7 +412,7 @@ the external database URL. See [Deployment (Render)](docs/deployment.md) and the
 - [Deployment (Render)](docs/deployment.md) — Render resources, free-tier limits, CI/CD, backups
 - [Changing slot duration](docs/slot-duration-migration.md) — zero-downtime path for 100M rows
 - [Future extensions](docs/future-extensions.md) — deferred waitlist design
-- [AI reflection](docs/ai-reflection.md) — Section 4 answers (to be completed)
+- [AI reflection](docs/ai-reflection.md) — Section 4 answers
 
 ## 6. Run locally
 

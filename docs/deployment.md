@@ -160,14 +160,3 @@ Seed command (idempotent) creates:
 
 The README publishes the live URL, demo credentials, and doctor IDs.
 
-## Submission checklist
-
-- [ ] Live Render URL reachable over HTTPS.
-- [ ] `render.yaml` applied and `RENDER_DATABASE_URL` / `RENDER_DEPLOY_HOOK_URL`
-      secrets configured.
-- [ ] `main` deploys automatically; pipeline described in the README.
-- [ ] Seeded doctors and demo patients documented.
-- [ ] Tests run on every PR.
-- [ ] Postgres plan has backups if the review window matters.
-- [ ] `/healthz` and `/readyz` monitored.
-- [ ] No secrets in git; no public Postgres access.
