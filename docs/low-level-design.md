@@ -419,13 +419,15 @@ coverage of the booking service and all four required endpoints.
 Local:
 
 ```bash
-python3.12 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
 cp .env.example .env        # DATABASE_URL, JWT_SECRET
 alembic upgrade head
 python -m app.seed
 uvicorn app.main:app --reload
 ```
+
+Run `ruff check .` and `pytest -q` before pushing.
 
 OpenAPI is available at `/docs`; this is the quickest way for an evaluator to
 exercise the API.

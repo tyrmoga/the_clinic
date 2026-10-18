@@ -419,13 +419,15 @@ the external database URL. See [Deployment (Render)](docs/deployment.md) and the
 Requires Python 3.12+ and a local PostgreSQL.
 
 ```bash
-python3.12 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
 cp .env.example .env        # set DATABASE_URL and JWT_SECRET
 alembic upgrade head
 python -m app.seed
 uvicorn app.main:app --reload
 ```
+
+Run the checks with `ruff check .` and `pytest -q`.
 
 Open `http://localhost:8000/docs` and log in with `demo1@clinic.test` /
 `DemoPass123!`.
