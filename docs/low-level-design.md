@@ -97,7 +97,7 @@ Validation happens at three layers, and the API maps failures explicitly:
 | `reason` | trim, 1–500 chars | `422` |
 | `limit` | 1–100 (default 20) | `422` |
 | `cursor` | base64url of `{start_at, id}`, valid shape | `400` |
-| `Idempotency-Key` | optional, 8–128 printable ASCII | `400` |
+| `Idempotency-Key` | optional, 8–128 visible ASCII (no spaces) | `400` |
 
 Additional rules:
 - Only parameterized SQL/ORM queries; no string interpolation of input.

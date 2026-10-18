@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -6,8 +7,22 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
-from app.db.models import Appointment, AppointmentEvent, AppointmentStatus, Doctor
+from app.db.models import (
+    Appointment,
+    AppointmentEvent,
+    AppointmentStatus,
+    Doctor,
+    IdempotencyKey,
+)
+from app.schemas.appointment import AppointmentResponse
 from app.services.availability import Slot, invalidate_availability, slots_for_doctor
+from app.services.idempotency import ENDPOINT, StoredResponse, get_stored
+
+
+@dataclass
+class BookingOutcome:
+    appointment: Appointment | None = None
+    stored: StoredResponse | None = None
 
 
 def normalize_start(start_at: datetime, doctor: Doctor) -> datetime:
@@ -19,6 +34,11 @@ def normalize_start(start_at: datetime, doctor: Doctor) -> datetime:
 def _is_slot_conflict(exc: IntegrityError) -> bool:
     diag = getattr(exc.orig, "diag", None)
     return getattr(diag, "constraint_name", None) == "one_active_booking_per_slot"
+
+
+def _is_idempotency_conflict(exc: IntegrityError) -> bool:
+    diag = getattr(exc.orig, "diag", None)
+    return getattr(diag, "constraint_name", None) == "idempotency_keys_patient_endpoint_key_key"
 
 
 async def _slot_for_start(
@@ -53,9 +73,21 @@ async def create_appointment(
     doctor_id: int,
     start_at: datetime,
     body_patient_id: int | None,
-) -> Appointment:
+    idempotency_key: str | None = None,
+    idempotency_hash: str | None = None,
+) -> BookingOutcome:
     if body_patient_id is not None and body_patient_id != patient_id:
         raise AppError(404, "not_found", "Resource not found.")
+
+    if idempotency_key and idempotency_hash:
+        stored = await get_stored(
+            session,
+            patient_id=patient_id,
+            key=idempotency_key,
+            request_hash=idempotency_hash,
+        )
+        if stored is not None:
+            return BookingOutcome(stored=stored)
 
     doctor = await session.get(Doctor, doctor_id)
     if doctor is None:
@@ -78,14 +110,46 @@ async def create_appointment(
     session.add(appointment)
     try:
         await session.flush()
+        await session.refresh(appointment)
+
+        if idempotency_key and idempotency_hash:
+            response_body = AppointmentResponse.model_validate(appointment).model_dump(mode="json")
+            session.add(
+                IdempotencyKey(
+                    patient_id=patient_id,
+                    endpoint=ENDPOINT,
+                    key=idempotency_key,
+                    request_hash=idempotency_hash,
+                    response_status=201,
+                    response_body=response_body,
+                )
+            )
+            await session.flush()
     except IntegrityError as exc:
         await session.rollback()
+
+        if idempotency_key and idempotency_hash:
+            stored = await get_stored(
+                session,
+                patient_id=patient_id,
+                key=idempotency_key,
+                request_hash=idempotency_hash,
+            )
+            if stored is not None:
+                return BookingOutcome(stored=stored)
+
         if _is_slot_conflict(exc):
             raise AppError(
                 409,
                 "slot_taken",
                 "That slot has just been booked.",
                 details={"start_at": slot.start_at.isoformat()},
+            ) from exc
+        if _is_idempotency_conflict(exc):
+            raise AppError(
+                409,
+                "idempotency_key_reused",
+                "This Idempotency-Key was already used with a different request.",
             ) from exc
         raise
 
@@ -101,4 +165,4 @@ async def create_appointment(
 
     local_day = slot.start_at.astimezone(ZoneInfo(doctor.timezone)).date()
     invalidate_availability(doctor.id, local_day)
-    return appointment
+    return BookingOutcome(appointment=appointment)
