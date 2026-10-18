@@ -8,7 +8,7 @@ os.environ.setdefault(
     "DATABASE_URL",
     "postgresql+psycopg://postgres:postgres@localhost:5432/clinic_test",
 )
-os.environ.setdefault("JWT_SECRET", "test-secret")
+os.environ.setdefault("JWT_SECRET", "test-secret-use-32-bytes-minimum")
 
 from app.main import create_app  # noqa: E402
 

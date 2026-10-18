@@ -62,31 +62,31 @@ PATIENTS = [
     {
         "id": 1,
         "full_name": "Demo Patient One",
-        "email": "demo1@clinic.test",
+        "email": "demo1@example.com",
         "phone": "+254700000001",
     },
     {
         "id": 2,
         "full_name": "Demo Patient Two",
-        "email": "demo2@clinic.test",
+        "email": "demo2@example.com",
         "phone": "+254700000002",
     },
     {
         "id": 3,
         "full_name": "Demo Patient Three",
-        "email": "demo3@clinic.test",
+        "email": "demo3@example.com",
         "phone": "+254700000003",
     },
     {
         "id": 4,
         "full_name": "Demo Patient Four",
-        "email": "demo4@clinic.test",
+        "email": "demo4@example.com",
         "phone": "+254700000004",
     },
     {
         "id": 5,
         "full_name": "Demo Patient Five",
-        "email": "demo5@clinic.test",
+        "email": "demo5@example.com",
         "phone": "+254700000005",
     },
 ]

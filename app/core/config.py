@@ -3,7 +3,7 @@ from functools import lru_cache
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-DEFAULT_JWT_SECRET = "dev-only-change-me"
+DEFAULT_JWT_SECRET = "dev-only-change-me-use-32-bytes-minimum"
 
 
 class Settings(BaseSettings):

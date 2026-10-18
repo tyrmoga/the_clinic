@@ -22,5 +22,5 @@ def test_seed_has_two_intervals_per_weekday() -> None:
 
 def test_demo_credentials_are_documented() -> None:
     emails = {patient["email"] for patient in PATIENTS}
-    assert emails == {f"demo{number}@clinic.test" for number in range(1, 6)}
+    assert emails == {f"demo{number}@example.com" for number in range(1, 6)}
     assert len(DEMO_PASSWORD) >= 8

@@ -7,7 +7,7 @@ Savannah Informatics backend take-home assessment.
 | Live API | `https://<service>.onrender.com`|
 | API docs | `https://<service>.onrender.com/docs` · `https://<service>.onrender.com/openapi.json` |
 | Repository | this repo, branch `main` |
-| Demo login | `demo1@clinic.test` / `DemoPass123!` (patients `1`–`5`) |
+| Demo login | `demo1@example.com` / `DemoPass123!` (patients `1`–`5`) |
 | Doctors | IDs `1`–`5` |
 
 
@@ -25,7 +25,7 @@ and `jq`.
 BASE_URL=https://<service>.onrender.com
 DATE=$(date -u -d 'next monday' +%F)
 TOKEN=$(curl -s "$BASE_URL/auth/login" -H 'Content-Type: application/json' \
-  -d '{"email":"demo1@clinic.test","password":"DemoPass123!"}' | jq -r .access_token)
+  -d '{"email":"demo1@example.com","password":"DemoPass123!"}' | jq -r .access_token)
 
 # 1. availability
 curl -s "$BASE_URL/doctors/1/availability?date=$DATE" \
@@ -299,7 +299,7 @@ Passwords stored as argon2id hashes; the token is a short-lived JWT carrying
 email → `409`. `login` and `register` get their own tighter rate-limit bucket
 than availability reads (brute force). Password reset is out of scope.
 
-**Demo access:** seeded patients `demo1@clinic.test` … `demo5@clinic.test`,
+**Demo access:** seeded patients `demo1@example.com` … `demo5@example.com`,
 password `DemoPass123!`; doctors `1`–`5`. These are demo-only credentials; see
 [Deployment](docs/deployment.md#demo-data-and-access).
 
@@ -307,7 +307,7 @@ password `DemoPass123!`; doctors `1`–`5`. These are demo-only credentials; see
 BASE_URL=https://<service>.onrender.com
 DATE=$(date -u -d '+2 days' +%F)
 TOKEN=$(curl -s "$BASE_URL/auth/login" -H 'Content-Type: application/json' \
-  -d '{"email":"demo1@clinic.test","password":"DemoPass123!"}' | jq -r .access_token)
+  -d '{"email":"demo1@example.com","password":"DemoPass123!"}' | jq -r .access_token)
 
 curl -s "$BASE_URL/doctors/1/availability?date=$DATE" \
   -H "Authorization: Bearer $TOKEN"
@@ -429,7 +429,7 @@ uvicorn app.main:app --reload
 
 Run the checks with `ruff check .` and `pytest -q`.
 
-Open `http://localhost:8000/docs` and log in with `demo1@clinic.test` /
+Open `http://localhost:8000/docs` and log in with `demo1@example.com` /
 `DemoPass123!`.
 
 ## 7. CI/CD and deployment

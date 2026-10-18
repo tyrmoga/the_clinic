@@ -76,7 +76,7 @@ free web + paid Postgres.
   failed deploy does not leave the old version broken.
 - After the first deploy, run the idempotent seed once from a trusted local or CI
   environment using the external `DATABASE_URL`.
-- Seed creates doctors `1`–`5` and `demo1@clinic.test` … `demo5@clinic.test` with
+- Seed creates doctors `1`–`5` and `demo1@example.com` … `demo5@example.com` with
   password `DemoPass123!` (demo environment only).
 
 ## CI/CD
@@ -132,7 +132,7 @@ Render removes host/TLS work, but the API still has to defend itself:
 Seed command (idempotent) creates:
 - Doctors `1`–`5`: Dr. Wanjiku, Dr. Otieno, Dr. Mwangi, Dr. Achieng, Dr. Kamau.
 - Mon–Fri 08:00–12:00 and 13:00–17:00 (16 slots/day).
-- Patients `demo1@clinic.test` … `demo5@clinic.test` (IDs `1`–`5`), password
+- Patients `demo1@example.com` … `demo5@example.com` (IDs `1`–`5`), password
   `DemoPass123!`.
 
 The README publishes the live URL, demo credentials, and doctor IDs.

@@ -321,7 +321,7 @@ LIMIT :limit + 1;
 - Protected routes derive `patient_id` from the token. Owner mismatch is `404`,
   not `403`, to avoid leaking existence.
 - Auth is not required by the assessment, so the README publishes seeded demo
-  credentials (`demo1@clinic.test` … `demo5@clinic.test`, password
+  credentials (`demo1@example.com` … `demo5@example.com`, password
   `DemoPass123!`) and doctor IDs `1`–`5`, so an evaluator can exercise the
   required endpoints immediately.
 
@@ -407,7 +407,7 @@ coverage of the booking service and all four required endpoints.
 - Seed command creates:
   - Doctors `1`–`5`: Dr. Wanjiku, Dr. Otieno, Dr. Mwangi, Dr. Achieng, Dr. Kamau.
   - Mon–Fri 08:00–12:00 and 13:00–17:00 working hours (16 slots/day).
-  - Patients `demo1@clinic.test` … `demo5@clinic.test` (IDs `1`–`5`), password
+  - Patients `demo1@example.com` … `demo5@example.com` (IDs `1`–`5`), password
     `DemoPass123!` (demo environment only).
 - Seed is idempotent (`ON CONFLICT DO NOTHING` or a lookup by natural key) so it
   can run on every deploy.
