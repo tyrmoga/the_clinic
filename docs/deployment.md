@@ -81,7 +81,7 @@ free web + paid Postgres.
 
 ## CI/CD
 
-Branch: `main`.
+Branch: `main`. The workflow lives in `.github/workflows/ci.yml`.
 
 On every pull request:
 1. `ruff check`

@@ -435,7 +435,7 @@ Open `http://localhost:8000/docs` and log in with `demo1@clinic.test` /
 ## 7. CI/CD and deployment
 
 - Every pull request runs `ruff check` and `pytest` against a PostgreSQL service
-  container.
+  container. The workflow is `.github/workflows/ci.yml`.
 - Merge to `main` runs the same tests, applies migrations, and deploys to Render.
 - Paid web services run migrations through Render's pre-deploy command; on the
   free web tier, GitHub Actions runs them against the external database URL before
